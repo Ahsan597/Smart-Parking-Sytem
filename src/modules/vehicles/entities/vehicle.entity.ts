@@ -1,13 +1,15 @@
-import { 
-  Entity, 
-  Column, 
-  PrimaryGeneratedColumn, 
-  CreateDateColumn, 
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
-  JoinColumn 
+  JoinColumn,
+  OneToMany
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { Booking } from '../../bookings/entities/booking.entity';
 
 export enum VehicleType {
   CAR = 'CAR',
@@ -57,4 +59,7 @@ export class Vehicle {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @OneToMany(() => Booking, booking => booking.vehicle)
+  bookings: Booking[];
 }
