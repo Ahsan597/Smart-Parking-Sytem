@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   OneToMany
 } from 'typeorm';
+import { Exclude } from 'class-transformer';
 import { Vehicle } from '../../vehicles/entities/vehicle.entity';
 import { ParkingLocation } from '../../parking-locations/entities/parking-location.entity';
 import { Booking } from '../../bookings/entities/booking.entity';
@@ -35,6 +36,7 @@ export class User {
   email: string;
 
   @Column()
+  @Exclude()
   password: string;
 
   @Column({ 
