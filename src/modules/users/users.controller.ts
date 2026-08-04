@@ -1,0 +1,47 @@
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { UsersService } from './users.service';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateUserRoleDto } from './dto/update-user-role.dto';
+import { CreateManagerDto } from './dto/create-manager.dto';
+import { User, UserRole } from './entities/user.entity';
+
+@Controller('users')
+@UseGuards(JwtAuthGuard)
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get('me')
+  getProfile(@CurrentUser() user: User) {
+    return user;
+  }
+
+  @Patch('me')
+  updateProfile(@CurrentUser() user: User, @Body() dto: UpdateProfileDto) {
+    return this.usersService.updateProfile(user.id, dto);
+  }
+
+  @Get()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  findAll(@Query('role') role?: UserRole) {
+    return this.usersService.findAll(role);
+  }
+
+  @Post('managers')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  createManager(@Body() dto: CreateManagerDto) {
+    return this.usersService.createManager(dto);
+  }
+
+  @Patch(':id/role')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  updateRole(@Param('id') id: string, @Body() dto: UpdateUserRoleDto) {
+    return this.usersService.updateRole(id, dto.role);
+  }
+}

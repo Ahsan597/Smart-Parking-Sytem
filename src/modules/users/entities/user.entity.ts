@@ -1,12 +1,16 @@
-import { 
-  Entity, 
-  Column, 
-  PrimaryGeneratedColumn, 
-  CreateDateColumn, 
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
   UpdateDateColumn,
-  OneToMany 
+  OneToMany
 } from 'typeorm';
+import { Exclude } from 'class-transformer';
 import { Vehicle } from '../../vehicles/entities/vehicle.entity';
+import { ParkingLocation } from '../../parking-locations/entities/parking-location.entity';
+import { Booking } from '../../bookings/entities/booking.entity';
+import { Notification } from '../../notifications/entities/notification.entity';
 
 export enum UserRole {
   USER = 'USER',
@@ -32,6 +36,7 @@ export class User {
   email: string;
 
   @Column()
+  @Exclude()
   password: string;
 
   @Column({ 
@@ -62,4 +67,13 @@ export class User {
 
   @OneToMany(() => Vehicle, vehicle => vehicle.user)
   vehicles: Vehicle[];
+
+  @OneToMany(() => ParkingLocation, location => location.manager)
+  managedLocations: ParkingLocation[];
+
+  @OneToMany(() => Booking, booking => booking.user)
+  bookings: Booking[];
+
+  @OneToMany(() => Notification, notification => notification.user)
+  notifications: Notification[];
 }
