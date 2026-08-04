@@ -6,6 +6,9 @@ import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
+import { ParkingLocationsModule } from './modules/parking-locations/parking-locations.module';
+import { FloorsModule } from './modules/floors/floors.module';
+import { SlotsModule } from './modules/slots/slots.module';
 
 @Module({
   imports: [
@@ -29,6 +32,9 @@ import { VehiclesModule } from './modules/vehicles/vehicles.module';
     AuthModule,
     UsersModule,
     VehiclesModule,
+    ParkingLocationsModule,
+    FloorsModule,
+    SlotsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
