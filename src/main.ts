@@ -2,6 +2,8 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,7 +16,12 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+  const reflector = app.get(Reflector);
+  app.useGlobalInterceptors(
+    new TransformInterceptor(reflector),
+    new ClassSerializerInterceptor(reflector),
+  );
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   app.enableCors({
     origin: configService.get<string>('FRONTEND_URL') || 'http://localhost:5173',

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
@@ -9,12 +10,15 @@ import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { ParkingLocationsModule } from './modules/parking-locations/parking-locations.module';
 import { FloorsModule } from './modules/floors/floors.module';
 import { SlotsModule } from './modules/slots/slots.module';
+import { PricingModule } from './modules/pricing/pricing.module';
+import { BookingsModule } from './modules/bookings/bookings.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
@@ -35,6 +39,8 @@ import { SlotsModule } from './modules/slots/slots.module';
     ParkingLocationsModule,
     FloorsModule,
     SlotsModule,
+    PricingModule,
+    BookingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
