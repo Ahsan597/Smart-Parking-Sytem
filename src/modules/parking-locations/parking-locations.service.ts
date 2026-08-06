@@ -1,16 +1,19 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ParkingLocation } from './entities/parking-location.entity';
+import { ParkingLocation, ParkingLocationStatus } from './entities/parking-location.entity';
+import { Slot, SlotStatus } from '../slots/entities/slot.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { CreateParkingLocationDto } from './dto/create-parking-location.dto';
 import { UpdateParkingLocationDto } from './dto/update-parking-location.dto';
+import { SearchParkingLocationsDto } from './dto/search-parking-locations.dto';
 
 @Injectable()
 export class ParkingLocationsService {
   constructor(
     @InjectRepository(ParkingLocation) private locationsRepository: Repository<ParkingLocation>,
     @InjectRepository(User) private usersRepository: Repository<User>,
+    @InjectRepository(Slot) private slotsRepository: Repository<Slot>,
   ) {}
 
   async create(dto: CreateParkingLocationDto): Promise<ParkingLocation> {
@@ -21,8 +24,42 @@ export class ParkingLocationsService {
     return this.locationsRepository.save(location);
   }
 
-  findAll(): Promise<ParkingLocation[]> {
-    return this.locationsRepository.find();
+  async search(filters: SearchParkingLocationsDto = {}): Promise<(ParkingLocation & { availableSlots: number })[]> {
+    const qb = this.locationsRepository
+      .createQueryBuilder('location')
+      .leftJoinAndSelect('location.pricing', 'pricing')
+      .where('location.status = :status', { status: ParkingLocationStatus.ACTIVE });
+
+    if (filters.city) {
+      qb.andWhere('location.city ILIKE :city', { city: `%${filters.city}%` });
+    }
+    if (filters.name) {
+      qb.andWhere('location.name ILIKE :name', { name: `%${filters.name}%` });
+    }
+
+    const locations = await qb.getMany();
+
+    const withAvailability = await Promise.all(
+      locations.map(async (location) => {
+        const availableSlots = await this.slotsRepository.count({
+          where: { floor: { parkingLocationId: location.id }, status: SlotStatus.AVAILABLE },
+        });
+        return { ...location, availableSlots };
+      }),
+    );
+
+    if (filters.onlyAvailable === 'true') {
+      return withAvailability.filter((location) => location.availableSlots > 0);
+    }
+    return withAvailability;
+  }
+
+  async findAvailableSlots(locationId: string): Promise<Slot[]> {
+    await this.findOneBare(locationId);
+    return this.slotsRepository.find({
+      where: { floor: { parkingLocationId: locationId }, status: SlotStatus.AVAILABLE },
+      relations: ['floor'],
+    });
   }
 
   findMine(managerId: string): Promise<ParkingLocation[]> {

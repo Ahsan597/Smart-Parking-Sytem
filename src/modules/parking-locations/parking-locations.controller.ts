@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -7,6 +7,7 @@ import { ResponseMessage } from '../../common/decorators/response-message.decora
 import { ParkingLocationsService } from './parking-locations.service';
 import { CreateParkingLocationDto } from './dto/create-parking-location.dto';
 import { UpdateParkingLocationDto } from './dto/update-parking-location.dto';
+import { SearchParkingLocationsDto } from './dto/search-parking-locations.dto';
 import { User, UserRole } from '../users/entities/user.entity';
 
 @Controller('parking-locations')
@@ -23,8 +24,8 @@ export class ParkingLocationsController {
 
   @Get()
   @ResponseMessage('Parking locations fetched successfully')
-  findAll() {
-    return this.locationsService.findAll();
+  findAll(@Query() query: SearchParkingLocationsDto) {
+    return this.locationsService.search(query);
   }
 
   @Get('my')
@@ -39,6 +40,12 @@ export class ParkingLocationsController {
   @ResponseMessage('Parking location fetched successfully')
   findOne(@Param('id') id: string) {
     return this.locationsService.findOne(id);
+  }
+
+  @Get(':id/available-slots')
+  @ResponseMessage('Available slots fetched successfully')
+  findAvailableSlots(@Param('id') id: string) {
+    return this.locationsService.findAvailableSlots(id);
   }
 
   @Patch(':id')
