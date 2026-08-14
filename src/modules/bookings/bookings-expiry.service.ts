@@ -3,8 +3,15 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Booking, BookingStatus } from './entities/booking.entity';
 import { Slot, SlotStatus } from '../slots/entities/slot.entity';
+import {
+  BOOKING_EXPIRED_EVENT,
+  BookingLifecycleEvent,
+  SLOT_UPDATED_EVENT,
+  SlotUpdatedEvent,
+} from '../realtime/events';
 
 @Injectable()
 export class BookingsExpiryService {
@@ -14,6 +21,7 @@ export class BookingsExpiryService {
     @InjectRepository(Booking) private bookingsRepository: Repository<Booking>,
     @InjectRepository(Slot) private slotsRepository: Repository<Slot>,
     private configService: ConfigService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -30,6 +38,29 @@ export class BookingsExpiryService {
       await this.bookingsRepository.save(booking);
       await this.slotsRepository.update(booking.slotId, { status: SlotStatus.AVAILABLE });
       this.logger.log(`Booking ${booking.id} expired (no check-in within grace period)`);
+
+      const slot = await this.slotsRepository.findOne({
+        where: { id: booking.slotId },
+        relations: ['floor', 'floor.parkingLocation'],
+      });
+      if (slot) {
+        this.eventEmitter.emit(SLOT_UPDATED_EVENT, {
+          slotId: slot.id,
+          slotCode: slot.slotCode,
+          floorId: slot.floor.id,
+          parkingLocationId: slot.floor.parkingLocation.id,
+          locationName: slot.floor.parkingLocation.name,
+          previousStatus: SlotStatus.RESERVED,
+          status: SlotStatus.AVAILABLE,
+        } as SlotUpdatedEvent);
+
+        this.eventEmitter.emit(BOOKING_EXPIRED_EVENT, {
+          userId: booking.userId,
+          bookingId: booking.id,
+          slotCode: slot.slotCode,
+          locationName: slot.floor.parkingLocation.name,
+        } as BookingLifecycleEvent);
+      }
     }
   }
 }
