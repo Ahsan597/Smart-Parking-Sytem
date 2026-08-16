@@ -8,6 +8,7 @@ import {
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ConfigService } from '@nestjs/config';
 import { Booking, BookingStatus } from './entities/booking.entity';
 import { Slot, SlotStatus } from '../slots/entities/slot.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
@@ -36,6 +37,7 @@ export class BookingsService {
     @InjectRepository(ParkingLocation) private locationsRepository: Repository<ParkingLocation>,
     @InjectDataSource() private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
+    private configService: ConfigService,
   ) {}
 
   async create(user: User, dto: CreateBookingDto): Promise<Booking> {
@@ -46,6 +48,8 @@ export class BookingsService {
     if (vehicle.userId !== user.id) {
       throw new ForbiddenException('You do not own this vehicle');
     }
+
+    const { checkInTime, checkOutTime } = this.validateBookingTimes(dto);
 
     const existingActive = await this.bookingsRepository.findOne({
       where: [
@@ -73,15 +77,12 @@ export class BookingsService {
       slot.status = SlotStatus.RESERVED;
       await slotRepo.save(slot);
 
-      const startTime = new Date();
-      const expectedEndTime = new Date(startTime.getTime() + dto.expectedDurationMinutes * 60000);
-
       const newBooking = manager.getRepository(Booking).create({
         userId: user.id,
         vehicleId: dto.vehicleId,
         slotId: dto.slotId,
-        startTime,
-        expectedEndTime,
+        startTime: checkInTime,
+        expectedEndTime: checkOutTime ?? null,
         status: BookingStatus.RESERVED,
       });
       return manager.getRepository(Booking).save(newBooking);
@@ -231,6 +232,40 @@ export class BookingsService {
       throw new ForbiddenException('This booking does not belong to you');
     }
     return booking;
+  }
+
+  private validateBookingTimes(dto: CreateBookingDto): { checkInTime: Date; checkOutTime: Date | null } {
+    const checkInTime = new Date(dto.checkInTime);
+    if (Number.isNaN(checkInTime.getTime())) {
+      throw new BadRequestException('checkInTime is not a valid date');
+    }
+
+    const now = Date.now();
+    const pastToleranceMs = 60 * 1000;
+    if (checkInTime.getTime() < now - pastToleranceMs) {
+      throw new BadRequestException('checkInTime cannot be in the past');
+    }
+
+    const maxAdvanceMinutes = Number(this.configService.get('MAX_ADVANCE_CHECKIN_MINUTES') ?? 120);
+    const maxAdvanceMs = maxAdvanceMinutes * 60000;
+    if (checkInTime.getTime() > now + maxAdvanceMs) {
+      throw new BadRequestException(
+        `checkInTime cannot be more than ${maxAdvanceMinutes} minutes in advance`,
+      );
+    }
+
+    let checkOutTime: Date | null = null;
+    if (dto.checkOutTime) {
+      checkOutTime = new Date(dto.checkOutTime);
+      if (Number.isNaN(checkOutTime.getTime())) {
+        throw new BadRequestException('checkOutTime is not a valid date');
+      }
+      if (checkOutTime.getTime() <= checkInTime.getTime()) {
+        throw new BadRequestException('checkOutTime must be after checkInTime');
+      }
+    }
+
+    return { checkInTime, checkOutTime };
   }
 
   private async getOwnedBooking(user: User, id: string): Promise<Booking> {
