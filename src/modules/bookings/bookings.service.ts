@@ -13,6 +13,8 @@ import { Slot, SlotStatus } from '../slots/entities/slot.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
 import { Payment, PaymentMethod, PaymentStatus } from '../payments/entities/payment.entity';
 import { User } from '../users/entities/user.entity';
+import { ParkingLocation } from '../parking-locations/entities/parking-location.entity';
+import { assertManagesLocation } from '../parking-locations/parking-locations.util';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { CheckoutDto } from './dto/checkout.dto';
 import {
@@ -31,6 +33,7 @@ export class BookingsService {
     @InjectRepository(Slot) private slotsRepository: Repository<Slot>,
     @InjectRepository(Vehicle) private vehiclesRepository: Repository<Vehicle>,
     @InjectRepository(Payment) private paymentsRepository: Repository<Payment>,
+    @InjectRepository(ParkingLocation) private locationsRepository: Repository<ParkingLocation>,
     @InjectDataSource() private dataSource: DataSource,
     private eventEmitter: EventEmitter2,
   ) {}
@@ -141,7 +144,26 @@ export class BookingsService {
     if (booking.status !== BookingStatus.CHECKED_IN) {
       throw new ConflictException('Only checked-in bookings can be checked out');
     }
+    return this.completeCheckout(booking, dto);
+  }
 
+  async forceCheckOut(user: User, id: string, dto: CheckoutDto): Promise<Booking> {
+    const booking = await this.bookingsRepository.findOne({
+      where: { id },
+      relations: ['slot', 'slot.floor', 'slot.floor.parkingLocation'],
+    });
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+    assertManagesLocation(user, booking.slot.floor.parkingLocation);
+
+    if (booking.status !== BookingStatus.CHECKED_IN) {
+      throw new ConflictException('Only checked-in bookings can be checked out');
+    }
+    return this.completeCheckout(booking, dto);
+  }
+
+  private async completeCheckout(booking: Booking, dto: CheckoutDto): Promise<Booking> {
     const slot = await this.slotsRepository.findOne({
       where: { id: booking.slotId },
       relations: ['floor', 'floor.parkingLocation', 'floor.parkingLocation.pricing'],
@@ -178,7 +200,7 @@ export class BookingsService {
     const updatedSlot = await this.emitSlotUpdated(booking.slotId, SlotStatus.OCCUPIED, SlotStatus.AVAILABLE);
     if (updatedSlot) {
       this.eventEmitter.emit(BOOKING_CHECKED_OUT_EVENT, {
-        userId: user.id,
+        userId: booking.userId,
         bookingId: booking.id,
         slotCode: updatedSlot.slotCode,
         locationName: updatedSlot.floor.parkingLocation.name,

@@ -3,10 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ParkingLocation, ParkingLocationStatus } from './entities/parking-location.entity';
 import { Slot, SlotStatus } from '../slots/entities/slot.entity';
+import { Booking, BookingStatus } from '../bookings/entities/booking.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { CreateParkingLocationDto } from './dto/create-parking-location.dto';
 import { UpdateParkingLocationDto } from './dto/update-parking-location.dto';
 import { SearchParkingLocationsDto } from './dto/search-parking-locations.dto';
+import { assertManagesLocation } from './parking-locations.util';
 
 @Injectable()
 export class ParkingLocationsService {
@@ -14,6 +16,7 @@ export class ParkingLocationsService {
     @InjectRepository(ParkingLocation) private locationsRepository: Repository<ParkingLocation>,
     @InjectRepository(User) private usersRepository: Repository<User>,
     @InjectRepository(Slot) private slotsRepository: Repository<Slot>,
+    @InjectRepository(Booking) private bookingsRepository: Repository<Booking>,
   ) {}
 
   async create(dto: CreateParkingLocationDto): Promise<ParkingLocation> {
@@ -64,6 +67,20 @@ export class ParkingLocationsService {
 
   findMine(managerId: string): Promise<ParkingLocation[]> {
     return this.locationsRepository.find({ where: { managerId } });
+  }
+
+  async findAllBookings(user: User, locationId: string, status?: BookingStatus): Promise<Booking[]> {
+    const location = await this.findOneBare(locationId);
+    assertManagesLocation(user, location);
+
+    return this.bookingsRepository.find({
+      where: {
+        slot: { floor: { parkingLocationId: locationId } },
+        ...(status ? { status } : {}),
+      },
+      relations: ['slot', 'slot.floor', 'slot.floor.parkingLocation', 'vehicle', 'payment', 'user'],
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async findOne(id: string): Promise<ParkingLocation> {
