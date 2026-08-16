@@ -30,14 +30,16 @@ export class BookingsExpiryService {
     const cutoff = new Date(Date.now() - graceMinutes * 60000);
 
     const staleBookings = await this.bookingsRepository.find({
-      where: { status: BookingStatus.RESERVED, createdAt: LessThan(cutoff) },
+      where: { status: BookingStatus.RESERVED, startTime: LessThan(cutoff) },
     });
 
     for (const booking of staleBookings) {
       booking.status = BookingStatus.EXPIRED;
       await this.bookingsRepository.save(booking);
       await this.slotsRepository.update(booking.slotId, { status: SlotStatus.AVAILABLE });
-      this.logger.log(`Booking ${booking.id} expired (no check-in within grace period)`);
+      this.logger.log(
+        `Booking ${booking.id} expired (no check-in within grace period of scheduled check-in time)`,
+      );
 
       const slot = await this.slotsRepository.findOne({
         where: { id: booking.slotId },

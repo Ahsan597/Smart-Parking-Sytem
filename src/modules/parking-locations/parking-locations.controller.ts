@@ -9,6 +9,7 @@ import { CreateParkingLocationDto } from './dto/create-parking-location.dto';
 import { UpdateParkingLocationDto } from './dto/update-parking-location.dto';
 import { SearchParkingLocationsDto } from './dto/search-parking-locations.dto';
 import { User, UserRole } from '../users/entities/user.entity';
+import { BookingStatus } from '../bookings/entities/booking.entity';
 
 @Controller('parking-locations')
 export class ParkingLocationsController {
@@ -46,6 +47,18 @@ export class ParkingLocationsController {
   @ResponseMessage('Available slots fetched successfully')
   findAvailableSlots(@Param('id') id: string) {
     return this.locationsService.findAvailableSlots(id);
+  }
+
+  @Get(':id/bookings')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PARKING_MANAGER)
+  @ResponseMessage('Bookings fetched successfully')
+  findAllBookings(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Query('status') status?: BookingStatus,
+  ) {
+    return this.locationsService.findAllBookings(user, id, status);
   }
 
   @Patch(':id')

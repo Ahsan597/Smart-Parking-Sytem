@@ -50,7 +50,7 @@ export class Booking {
   @Column({ name: 'start_time' })
   startTime: Date;
 
-  @Column({ name: 'expected_end_time' })
+  @Column({ nullable: true, name: 'expected_end_time' })
   expectedEndTime: Date;
 
   @Column({ nullable: true, name: 'actual_checkin_time' })

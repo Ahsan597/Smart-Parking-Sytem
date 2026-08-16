@@ -1,4 +1,4 @@
-import { IsInt, IsUUID, Max, Min } from 'class-validator';
+import { IsISO8601, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateBookingDto {
   @IsUUID()
@@ -7,8 +7,10 @@ export class CreateBookingDto {
   @IsUUID()
   vehicleId: string;
 
-  @IsInt()
-  @Min(15)
-  @Max(1440)
-  expectedDurationMinutes: number;
+  @IsISO8601()
+  checkInTime: string;
+
+  @IsOptional()
+  @IsISO8601()
+  checkOutTime?: string;
 }
