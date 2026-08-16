@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Booking, BookingStatus } from './entities/booking.entity';
 import { Slot, SlotStatus } from '../slots/entities/slot.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
@@ -14,6 +15,14 @@ import { Payment, PaymentMethod, PaymentStatus } from '../payments/entities/paym
 import { User } from '../users/entities/user.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { CheckoutDto } from './dto/checkout.dto';
+import {
+  BOOKING_CANCELLED_EVENT,
+  BOOKING_CHECKED_OUT_EVENT,
+  BOOKING_RESERVED_EVENT,
+  BookingLifecycleEvent,
+  SLOT_UPDATED_EVENT,
+  SlotUpdatedEvent,
+} from '../realtime/events';
 
 @Injectable()
 export class BookingsService {
@@ -23,6 +32,7 @@ export class BookingsService {
     @InjectRepository(Vehicle) private vehiclesRepository: Repository<Vehicle>,
     @InjectRepository(Payment) private paymentsRepository: Repository<Payment>,
     @InjectDataSource() private dataSource: DataSource,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async create(user: User, dto: CreateBookingDto): Promise<Booking> {
@@ -44,7 +54,7 @@ export class BookingsService {
       throw new ConflictException('This vehicle already has an active booking');
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const booking = await this.dataSource.transaction(async (manager) => {
       const slotRepo = manager.getRepository(Slot);
       const slot = await slotRepo.findOne({
         where: { id: dto.slotId },
@@ -63,7 +73,7 @@ export class BookingsService {
       const startTime = new Date();
       const expectedEndTime = new Date(startTime.getTime() + dto.expectedDurationMinutes * 60000);
 
-      const booking = manager.getRepository(Booking).create({
+      const newBooking = manager.getRepository(Booking).create({
         userId: user.id,
         vehicleId: dto.vehicleId,
         slotId: dto.slotId,
@@ -71,8 +81,20 @@ export class BookingsService {
         expectedEndTime,
         status: BookingStatus.RESERVED,
       });
-      return manager.getRepository(Booking).save(booking);
+      return manager.getRepository(Booking).save(newBooking);
     });
+
+    const slot = await this.emitSlotUpdated(dto.slotId, SlotStatus.AVAILABLE, SlotStatus.RESERVED);
+    if (slot) {
+      this.eventEmitter.emit(BOOKING_RESERVED_EVENT, {
+        userId: user.id,
+        bookingId: booking.id,
+        slotCode: slot.slotCode,
+        locationName: slot.floor.parkingLocation.name,
+      } as BookingLifecycleEvent);
+    }
+
+    return booking;
   }
 
   async cancel(user: User, id: string): Promise<Booking> {
@@ -84,6 +106,17 @@ export class BookingsService {
     booking.status = BookingStatus.CANCELLED;
     await this.bookingsRepository.save(booking);
     await this.slotsRepository.update(booking.slotId, { status: SlotStatus.AVAILABLE });
+
+    const slot = await this.emitSlotUpdated(booking.slotId, SlotStatus.RESERVED, SlotStatus.AVAILABLE);
+    if (slot) {
+      this.eventEmitter.emit(BOOKING_CANCELLED_EVENT, {
+        userId: user.id,
+        bookingId: booking.id,
+        slotCode: slot.slotCode,
+        locationName: slot.floor.parkingLocation.name,
+      } as BookingLifecycleEvent);
+    }
+
     return booking;
   }
 
@@ -97,6 +130,9 @@ export class BookingsService {
     booking.actualCheckinTime = new Date();
     await this.bookingsRepository.save(booking);
     await this.slotsRepository.update(booking.slotId, { status: SlotStatus.OCCUPIED });
+
+    await this.emitSlotUpdated(booking.slotId, SlotStatus.RESERVED, SlotStatus.OCCUPIED);
+
     return booking;
   }
 
@@ -138,6 +174,18 @@ export class BookingsService {
     await this.paymentsRepository.save(payment);
 
     booking.payment = payment;
+
+    const updatedSlot = await this.emitSlotUpdated(booking.slotId, SlotStatus.OCCUPIED, SlotStatus.AVAILABLE);
+    if (updatedSlot) {
+      this.eventEmitter.emit(BOOKING_CHECKED_OUT_EVENT, {
+        userId: user.id,
+        bookingId: booking.id,
+        slotCode: updatedSlot.slotCode,
+        locationName: updatedSlot.floor.parkingLocation.name,
+        amount: Number(payment.amount),
+      } as BookingLifecycleEvent);
+    }
+
     return booking;
   }
 
@@ -172,5 +220,31 @@ export class BookingsService {
       throw new ForbiddenException('This booking does not belong to you');
     }
     return booking;
+  }
+
+  private async emitSlotUpdated(
+    slotId: string,
+    previousStatus: SlotStatus,
+    newStatus: SlotStatus,
+  ): Promise<Slot | null> {
+    const slot = await this.slotsRepository.findOne({
+      where: { id: slotId },
+      relations: ['floor', 'floor.parkingLocation'],
+    });
+    if (!slot) {
+      return null;
+    }
+
+    this.eventEmitter.emit(SLOT_UPDATED_EVENT, {
+      slotId: slot.id,
+      slotCode: slot.slotCode,
+      floorId: slot.floor.id,
+      parkingLocationId: slot.floor.parkingLocation.id,
+      locationName: slot.floor.parkingLocation.name,
+      previousStatus,
+      status: newStatus,
+    } as SlotUpdatedEvent);
+
+    return slot;
   }
 }

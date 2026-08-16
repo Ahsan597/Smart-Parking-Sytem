@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
@@ -12,6 +13,11 @@ import { FloorsModule } from './modules/floors/floors.module';
 import { SlotsModule } from './modules/slots/slots.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { FavoritesModule } from './modules/favorites/favorites.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -19,6 +25,7 @@ import { BookingsModule } from './modules/bookings/bookings.module';
       isGlobal: true,
     }),
     ScheduleModule.forRoot(),
+    EventEmitterModule.forRoot(),
     TypeOrmModule.forRootAsync({
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
@@ -41,6 +48,11 @@ import { BookingsModule } from './modules/bookings/bookings.module';
     SlotsModule,
     PricingModule,
     BookingsModule,
+    RealtimeModule,
+    NotificationsModule,
+    FavoritesModule,
+    PaymentsModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
